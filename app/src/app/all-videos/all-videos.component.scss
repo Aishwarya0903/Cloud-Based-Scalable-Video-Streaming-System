@@ -1,0 +1,17 @@
+.mat-card {
+    width: 30rem;
+    cursor: pointer;
+    transition: transform 300ms;
+    margin: 1rem;
+}
+
+.mat-card:hover{
+    transform: scale(1.01);
+    transition: transform 300ms;
+}
+
+main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}

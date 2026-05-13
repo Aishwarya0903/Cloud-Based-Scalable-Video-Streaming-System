@@ -1,0 +1,32 @@
+<main *ngIf="videoNotFound">
+  <h1>Video Not Found</h1>
+</main>
+
+<main *ngIf="videoDetail">
+    <section class="video-container">
+        <!-- <div class="placeholder-video"></div> -->
+        <vm-player>
+
+            <!-- Provider component is placed here. -->
+            <vm-hls [config]="hlsConfig" cross-origin="true" poster={{videoDetail.videoThumb}}>
+                <!-- These are passed directly to the underlying HTML5 `<video>` element. -->
+                <!-- Why `data-src`? Lazy loading, you can always use `src` if you prefer.  -->
+                <!-- <source data-src={{videoDetail.videoURL}} type="application/x-mpegURL" /> -->
+                <source data-src={{videoDetail.videoURL}} type="application/x-mpegURL" />
+              </vm-hls>            
+          
+            <!-- <vm-ui>
+              <vm-click-to-play></vm-click-to-play>
+              <vm-spinner></vm-spinner>
+            </vm-ui> -->
+            <vm-default-ui>
+              <vm-default-controls></vm-default-controls>
+            </vm-default-ui>
+          </vm-player>
+    </section>
+    <section>
+        <h1>{{videoDetail.videoTitle}}</h1>
+        <h3>{{videoDetail.videoDesc}}</h3>
+        <h3>{{videoDetail.uploadDate}}</h3>
+    </section>
+</main>

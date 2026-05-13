@@ -1,0 +1,13 @@
+<main>
+    <div *ngFor="let video of allVideos2;">
+        <mat-card [routerLink]="['video', video.id]">
+            <img mat-card-image src={{video.videoThumb}}>
+            <mat-card-content>
+                <mat-card-title>{{video.videoTitle}}</mat-card-title>
+                <mat-card-subtitle>Uploaded by {{video.uploadedBy}}</mat-card-subtitle>
+                <mat-card-subtitle>{{video.views}} Views • {{video.uploadDate}}</mat-card-subtitle>
+            </mat-card-content>
+        </mat-card>
+    </div>
+</main>
+

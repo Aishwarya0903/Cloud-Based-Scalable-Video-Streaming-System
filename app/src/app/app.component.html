@@ -1,0 +1,11 @@
+<mat-toolbar *ngIf="!!apiKey" color="primary" fxLayout="row" fxLayoutAlign="space-around center" class="toolbar">
+    <div class="toolbar-items">
+        <div><span class="mat-title heading" routerLink="/">TeaTime</span></div>
+        <a routerLink="/upload"><button mat-flat-button>Upload</button></a>
+    </div>
+</mat-toolbar>
+<div class="app-wrapper">
+    <router-outlet></router-outlet>
+</div>
+<!-- <app-view-video></app-view-video> -->
+<!-- <app-all-videos></app-all-videos> -->
