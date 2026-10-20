@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data
+*.db
+*.sqlite3
+media/
+tmp/
+*.mp4
+*.mov
+!samples/.gitkeep
+
+# Secrets
+.env
+*.pem
+infra/terraform/*.tfvars
+!infra/terraform/*.tfvars.example
+.terraform/
+*.tfstate*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

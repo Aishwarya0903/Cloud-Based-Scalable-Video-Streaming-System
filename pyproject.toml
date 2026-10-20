@@ -1,0 +1,17 @@
+[project]
+name = "streamforge"
+version = "1.0.0"
+description = "Cloud-native adaptive video streaming platform on Flask + AWS S3/CloudFront"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "BLE"]
+ignore = ["E501"]

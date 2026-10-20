@@ -1,16 +1,20 @@
-Cloud-Based Scalable Video Streaming System (AWS)
+# StreamForge — Cloud-Based Scalable Video Streaming System
 
-A cloud-based video streaming platform built using AWS and Flask for scalable video storage and fast content delivery.
+A cloud-native video streaming platform built with **Python/Flask** and **AWS S3 + CloudFront**
+(S3-compatible MinIO locally). Being built in phases; see the commit history.
 
-🚀 Features
-Video upload and retrieval APIs
-Amazon S3 for cloud storage
-CloudFront CDN for low-latency streaming
-Flask backend with Boto3 integration
-Optimized request handling and scalability
-🛠️ Tech Stack
-Python
-Flask
-AWS S3
-AWS CloudFront
-Boto3
+## Phase 1 — Core API (done)
+- Flask app factory, SQLAlchemy models, JSON error contract, JWT auth
+- **Direct-to-S3 resumable multipart uploads**: the browser PUTs parts in parallel to presigned
+  URLs; the API never handles video bytes. Completion uses S3's own part list (no client-forged ETags)
+- Video library with search, sorting, pagination and public / unlisted / private visibility
+- Liveness `/healthz` and readiness `/readyz` probes
+- Docker Compose stack: API, PostgreSQL, Redis, MinIO — all free
+- pytest suite against mocked S3 (moto)
+
+## Run it
+```bash
+docker compose up --build          # API on http://localhost:8000
+# or without Docker:
+pip install -r requirements-dev.txt && pytest
+```
