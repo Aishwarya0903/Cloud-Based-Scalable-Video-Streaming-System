@@ -39,8 +39,6 @@ def create_app(overrides: dict | None = None) -> Flask:
         if app.config["S3_CREATE_BUCKETS"]:
             app.extensions["storage"].ensure_buckets()
         # Don't hand pooled connections to forked gunicorn workers (--preload).
-        # (In-memory SQLite lives in its single connection, so keep that one.)
-        if db.engine.url.get_backend_name() != "sqlite":
-            db.engine.dispose()
+        db.engine.dispose()
 
     return app
