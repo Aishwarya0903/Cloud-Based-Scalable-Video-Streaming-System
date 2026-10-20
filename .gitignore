@@ -30,3 +30,5 @@ infra/terraform/*.tfvars
 .DS_Store
 .idea/
 .vscode/
+.env.aws
+dump.rdb

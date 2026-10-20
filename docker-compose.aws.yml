@@ -1,0 +1,24 @@
+# Run the app against real AWS (S3 + CloudFront) instead of MinIO + the local edge cache.
+#   docker compose -f docker-compose.yml -f docker-compose.aws.yml --env-file .env.aws up --build
+# Values come from `terraform output app_env` (see infra/terraform/README.md).
+x-aws-env: &aws-env
+  AWS_REGION: ${AWS_REGION}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  S3_ENDPOINT_URL: ""          # empty = real AWS endpoints
+  S3_PUBLIC_ENDPOINT_URL: ""
+  S3_CREATE_BUCKETS: "false"   # Terraform owns the buckets
+  RAW_BUCKET: ${RAW_BUCKET}
+  MEDIA_BUCKET: ${MEDIA_BUCKET}
+  CDN_MODE: cloudfront
+  CDN_BASE_URL: ${CDN_BASE_URL}
+  CLOUDFRONT_KEY_PAIR_ID: ${CLOUDFRONT_KEY_PAIR_ID}
+  CLOUDFRONT_PRIVATE_KEY: ${CLOUDFRONT_PRIVATE_KEY}
+
+services:
+  api:
+    environment: *aws-env
+  worker:
+    environment: *aws-env
+  minio:
+    profiles: ["local-s3"]   # not started in AWS mode

@@ -41,6 +41,25 @@ A cloud-native video streaming platform built with **Python/Flask** and **AWS S3
 | 1.5 MB segment MISS → HIT | 18 ms → 2 ms |
 | Cold cache, 140 simultaneous requests | 96.4 % served from cache (5 origin fetches) |
 
+## Phase 4 — AWS infrastructure as code: S3 + CloudFront (done)
+Terraform in [`infra/terraform`](infra/terraform/README.md) provisions the production delivery path:
+- **CloudFront distribution** in front of a private media bucket via **Origin Access Control**
+  (S3 is never public; direct reads get 403)
+- Separate **cache policies**: 60 s for HLS playlists, 1 year for immutable segments/posters/sprites;
+  HTTP/2 + HTTP/3, IPv6, gzip/brotli, HTTPS-only, `PriceClass_100`
+- **Signed URLs** via a CloudFront key group; the API signs a wildcard policy per video, and
+  signatures are excluded from the cache key so every viewer shares the edge cache
+- Response headers policy for HLS-player CORS + HSTS
+- Raw-upload bucket with browser CORS, SSE-S3 encryption, and lifecycle rules that abort stale
+  multipart uploads and expire originals (cost control)
+- Least-privilege IAM policy for the app; optional $1/month AWS Budget alert
+- `docker-compose.aws.yml` runs the same app against real AWS; `scripts/verify_cloudfront.py`
+  proves the live distribution (unsigned 403, S3 direct 403, signed 200, edge cache Hit)
+- **GitHub Actions CI**: ruff + pytest (Python 3.10 & 3.12, real ffmpeg), `terraform fmt`/`validate`,
+  Docker build
+
+All of it fits the AWS Free Tier for a demo (CloudFront: 1 TB/month always free).
+
 ## Run it
 ```bash
 docker compose up --build          # app + edge on http://localhost:8080
