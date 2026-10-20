@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="watch" data-video-id="{{ video_id }}">
+  <div class="stage">
+    <div class="player" id="player" tabindex="-1">
+      <video id="video" playsinline preload="metadata"></video>
+      <div class="player-msg" id="player-msg" hidden></div>
+      <div class="controls" id="controls">
+        <button class="ctl" type="button" id="play" aria-label="Play">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M7 5v14l12-7z"/><path class="i-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <div class="seek" id="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="seek-buffer" id="seek-buffer"></div>
+          <div class="seek-fill" id="seek-fill"></div>
+          <div class="preview" id="preview" hidden><div class="preview-img" id="preview-img"></div><span id="preview-time"></span></div>
+        </div>
+        <span class="time" id="time">0:00 / 0:00</span>
+        <button class="ctl" type="button" id="mute" aria-label="Mute">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="i-wave" d="M16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <label class="sr-only" for="quality">Quality</label>
+        <select id="quality" class="quality"><option value="-1">Auto</option></select>
+        <button class="ctl" type="button" id="fullscreen" aria-label="Full screen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+    <article class="watch-info">
+      <h1 class="watch-title" id="title">Loading…</h1>
+      <p class="meta" id="meta"></p>
+      <p class="desc" id="desc"></p>
+    </article>
+    <aside class="ladder-panel" aria-labelledby="ladder-h">
+      <h2 id="ladder-h">Stream quality</h2>
+      <p class="ladder-note" id="ladder-note">Auto picks the best quality your connection can sustain.</p>
+      <ol class="ladder" id="ladder"></ol>
+      <dl class="stats">
+        <div><dt>Bandwidth estimate</dt><dd id="st-bw">–</dd></div>
+        <div><dt>Buffered ahead</dt><dd id="st-buf">–</dd></div>
+        <div><dt>Startup time</dt><dd id="st-start">–</dd></div>
+        <div><dt>Quality switches</dt><dd id="st-switch">0</dd></div>
+      </dl>
+    </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('web.static', filename='vendor/hls-1.5.20.min.js') }}"></script>
+<script type="module" src="{{ url_for('web.static', filename='js/watch.js') }}"></script>
+{% endblock %}

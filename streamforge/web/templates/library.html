@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="page">
+  <div class="page-head">
+    <h1 class="display" id="library-title">Library</h1>
+    <div class="segmented" role="group" aria-label="Sort videos">
+      <button type="button" data-sort="recent" aria-pressed="true">Newest</button>
+      <button type="button" data-sort="popular" aria-pressed="false">Most watched</button>
+      <button type="button" data-sort="title" aria-pressed="false">A–Z</button>
+    </div>
+  </div>
+  <div class="grid" id="grid" aria-live="polite"></div>
+  <div class="empty" id="empty" hidden>
+    <h2>No videos yet</h2>
+    <p>Uploaded videos appear here once they finish processing.</p>
+    <a class="btn btn-primary" href="/upload">Upload a video</a>
+  </div>
+  <nav class="pager" id="pager" aria-label="Pages" hidden>
+    <button class="btn" type="button" data-page-step="-1">Previous</button>
+    <span id="page-label"></span>
+    <button class="btn" type="button" data-page-step="1">Next</button>
+  </nav>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('web.static', filename='js/library.js') }}"></script>{% endblock %}

@@ -34,7 +34,7 @@ from .storage import get_storage
 
 bp = Blueprint("cdn", __name__)
 
-SAFE_PATH = re.compile(r"^[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*\.(m3u8|ts|m4s|jpg|vtt)$")
+SAFE_PATH = re.compile(r"^[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*\.(m3u8|ts|m4s|mp4|jpg|vtt)$")
 VIDEO_ID = re.compile(r"^[0-9a-f\-]{36}$")
 PASS_HEADERS = ("Content-Type", "Content-Length", "Content-Range", "Cache-Control", "ETag", "Last-Modified")
 

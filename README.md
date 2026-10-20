@@ -60,9 +60,27 @@ Terraform in [`infra/terraform`](infra/terraform/README.md) provisions the produ
 
 All of it fits the AWS Free Tier for a demo (CloudFront: 1 TB/month always free).
 
+## Phase 5 — Web player and upload studio (done)
+![Watch page: player with the live rendition ladder](docs/screenshots/watch.jpg)
+
+- **Adaptive player** on hls.js (vendored, no third-party CDN): custom controls, keyboard shortcuts
+  (space/k, j/l, m, f), seek-bar **thumbnail previews** from the sprite + WebVTT
+- **Live rendition ladder** beside the player: highlights the rung actually playing as hls.js switches,
+  click a rung to lock quality; live bandwidth estimate, buffer, startup time and switch count
+- Works with all three delivery modes; in CloudFront mode the signed query rides on every
+  playlist/segment request
+- **Upload page** with a live grid of multipart parts, 4 parallel PUTs straight to S3, retries
+  with backoff, automatic re-signing of expired URLs, and **resume after reload**
+  (asks S3 which parts it already has), then live transcode progress
+- "Your videos" studio: status, progress, re-process, delete; library with search, sort, paging
+- Responsive down to phone width, visible keyboard focus, reduced-motion support, dark mode
+
+Measured locally: a 24 MB 1080p clip uploaded in 0.8 s (4 parallel parts); 40 s of 1080p
+became a 4-rung ladder in 89 s on a 2-vCPU container; playback started in about 0.5 s.
+
 ## Run it
 ```bash
-docker compose up --build          # app + edge on http://localhost:8080
+docker compose up --build          # open http://localhost:8080
 # or without Docker:
 pip install -r requirements-dev.txt && pytest
 ```

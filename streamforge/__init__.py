@@ -15,7 +15,7 @@ __version__ = "1.0.0"
 
 
 def create_app(overrides: dict | None = None) -> Flask:
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder=None)  # UI assets are served by the web blueprint
     app.config.update(load_config())
     if overrides:
         app.config.update(overrides)
@@ -31,8 +31,9 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     from . import auth, cdn, health
     from .api import uploads, videos
+    from .web import bp as web_bp
 
-    for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp, cdn.bp):
+    for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp, cdn.bp, web_bp):
         app.register_blueprint(blueprint)
     register_error_handlers(app)
     _register_cli(app)

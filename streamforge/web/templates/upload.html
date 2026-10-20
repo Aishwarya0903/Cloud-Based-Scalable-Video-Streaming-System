@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Upload | StreamForge{% endblock %}
+{% block main %}
+<section class="page narrow">
+  <h1 class="display">Upload a video</h1>
+  <p class="lede">Files go straight to storage in parallel pieces. If your connection drops, choose the same file again and the upload picks up where it stopped.</p>
+  <form id="upload-form" class="upload-form">
+    <label class="drop" id="drop" for="file">
+      <input id="file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo,video/mpeg" required>
+      <strong id="drop-title">Choose a video or drop it here</strong>
+      <span id="drop-sub">MP4, MOV, WebM, MKV, AVI or MPEG, up to 5 GB</span>
+    </label>
+    <div class="field"><label for="title">Title</label><input id="title" maxlength="200" required></div>
+    <div class="field"><label for="description">Description <span class="opt">(optional)</span></label><textarea id="description" rows="3" maxlength="5000"></textarea></div>
+    <fieldset class="field">
+      <legend>Who can watch</legend>
+      <div class="segmented" role="radiogroup">
+        <label><input type="radio" name="visibility" value="public" checked> Everyone</label>
+        <label><input type="radio" name="visibility" value="unlisted"> Anyone with the link</label>
+        <label><input type="radio" name="visibility" value="private"> Only me</label>
+      </div>
+    </fieldset>
+    <button class="btn btn-primary btn-lg" id="start" type="submit">Upload</button>
+  </form>
+
+  <section class="transfer" id="transfer" hidden aria-live="polite">
+    <div class="transfer-head">
+      <h2 id="transfer-title"></h2>
+      <button class="btn" type="button" id="cancel">Cancel upload</button>
+    </div>
+    <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+    <p class="transfer-line"><span id="pct">0%</span><span id="rate"></span><span id="eta"></span></p>
+    <div class="parts" id="parts" aria-hidden="true"></div>
+    <p class="parts-legend" id="parts-legend"></p>
+    <div class="processing" id="processing" hidden>
+      <h3>Preparing streams</h3>
+      <div class="bar"><div class="bar-fill bar-fill-signal" id="proc-fill"></div></div>
+      <p id="proc-line">Waiting for a worker…</p>
+    </div>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('web.static', filename='js/upload.js') }}"></script>{% endblock %}

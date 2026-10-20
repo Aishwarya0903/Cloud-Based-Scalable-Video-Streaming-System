@@ -43,11 +43,23 @@ class S3Storage:
 
     # ------------------------------------------------------------------ setup
     def ensure_buckets(self) -> None:
+        """Local/dev only (on AWS, Terraform owns the buckets)."""
         for bucket in (self.raw_bucket, self.media_bucket):
             try:
                 self.client.head_bucket(Bucket=bucket)
             except ClientError:
                 self.client.create_bucket(Bucket=bucket)
+        # Browsers PUT upload parts straight to the raw bucket, cross-origin.
+        try:
+            self.client.put_bucket_cors(
+                Bucket=self.raw_bucket,
+                CORSConfiguration={"CORSRules": [{
+                    "AllowedMethods": ["PUT", "GET", "HEAD"], "AllowedOrigins": ["*"],
+                    "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3000,
+                }]},
+            )
+        except ClientError:
+            pass  # e.g. MinIO, which allows all origins by default and rejects this call
 
     def ping(self) -> bool:
         self.client.head_bucket(Bucket=self.media_bucket)

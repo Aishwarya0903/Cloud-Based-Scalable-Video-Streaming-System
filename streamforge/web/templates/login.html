@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Sign in | StreamForge{% endblock %}
+{% block main %}
+<section class="page auth">
+  <h1 class="display" id="auth-title">Sign in</h1>
+  <form id="auth-form" class="auth-form" novalidate>
+    <div class="field" id="name-field" hidden><label for="display_name">Name</label><input id="display_name" autocomplete="name" maxlength="80"></div>
+    <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required></div>
+    <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" minlength="8" required></div>
+    <p class="form-error" id="form-error" role="alert" hidden></p>
+    <button class="btn btn-primary btn-lg" id="auth-submit" type="submit">Sign in</button>
+  </form>
+  <p class="switch">
+    <span id="switch-text">New here?</span>
+    <button class="linklike" type="button" id="switch-mode">Create an account</button>
+  </p>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('web.static', filename='js/login.js') }}"></script>{% endblock %}

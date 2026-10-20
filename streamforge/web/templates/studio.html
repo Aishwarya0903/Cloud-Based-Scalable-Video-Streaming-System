@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Your videos | StreamForge{% endblock %}
+{% block main %}
+<section class="page">
+  <div class="page-head">
+    <h1 class="display">Your videos</h1>
+    <a class="btn btn-primary" href="/upload">Upload</a>
+  </div>
+  <table class="studio" id="studio">
+    <thead><tr><th scope="col">Video</th><th scope="col">Status</th><th scope="col">Qualities</th><th scope="col">Views</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody id="studio-rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>
+    <h2>Nothing uploaded yet</h2>
+    <p>Your uploads, including ones still processing, are listed here.</p>
+    <a class="btn btn-primary" href="/upload">Upload a video</a>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('web.static', filename='js/studio.js') }}"></script>{% endblock %}
