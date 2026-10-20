@@ -5,7 +5,7 @@
 
 data "aws_iam_policy_document" "app" {
   statement {
-    sid     = "RawUploads"
+    sid = "RawUploads"
     actions = [
       "s3:PutObject",
       "s3:GetObject",
