@@ -21,16 +21,18 @@ def create_app(overrides: dict | None = None) -> Flask:
         app.config.update(overrides)
     if app.config["ENV"] == "production" and app.config["SECRET_KEY"].startswith("dev-only"):
         raise RuntimeError("Set a strong SECRET_KEY before running in production.")
+    if app.config["ENV"] == "production" and app.config["CDN_SIGNING_SECRET"].startswith("dev-only"):
+        raise RuntimeError("Set CDN_SIGNING_SECRET before running in production.")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
     db.init_app(app)
     app.extensions["storage"] = S3Storage(app.config)
 
-    from . import auth, health
+    from . import auth, cdn, health
     from .api import uploads, videos
 
-    for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp):
+    for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp, cdn.bp):
         app.register_blueprint(blueprint)
     register_error_handlers(app)
     _register_cli(app)

@@ -60,6 +60,15 @@ def load_config() -> dict:
             "video/x-msvideo",
             "video/mpeg",
         },
+        # --- delivery / CDN -------------------------------------------------
+        "CDN_MODE": _env("CDN_MODE", "direct"),  # direct | edge | cloudfront
+        # Prefix for playback URLs: "" = same origin, or https://dxxxx.cloudfront.net
+        "CDN_BASE_URL": _env("CDN_BASE_URL", ""),
+        "CDN_TOKEN_TTL": _int("CDN_TOKEN_TTL_SECONDS", 4 * 3600),
+        "CDN_SIGNING_SECRET": _env("CDN_SIGNING_SECRET", "dev-only-cdn-signing-secret"),
+        "CDN_ORIGIN_SECRET": _env("CDN_ORIGIN_SECRET", ""),
+        "CLOUDFRONT_KEY_PAIR_ID": _env("CLOUDFRONT_KEY_PAIR_ID", ""),
+        "CLOUDFRONT_PRIVATE_KEY": (_env("CLOUDFRONT_PRIVATE_KEY", "") or "").replace("\\n", "\n"),
         # --- queue ----------------------------------------------------------
         "REDIS_URL": _env("REDIS_URL", "redis://localhost:6379/0"),
         "QUEUE_NAME": _env("QUEUE_NAME", "transcode"),

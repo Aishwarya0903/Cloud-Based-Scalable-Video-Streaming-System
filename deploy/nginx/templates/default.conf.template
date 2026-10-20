@@ -1,0 +1,67 @@
+# StreamForge edge - a local stand-in for Amazon CloudFront.
+#
+#   /cdn/<token>/<expires>/<video_id>/<file>   signed, cached media delivery
+#   everything else                            reverse-proxied to the Flask API
+#
+# ${CDN_SIGNING_SECRET} and ${CDN_ORIGIN_SECRET} are filled in from the environment
+# by the official nginx image's envsubst step at container start.
+
+proxy_cache_path /var/cache/nginx/media levels=1:2 keys_zone=media:50m
+                 max_size=2g inactive=7d use_temp_path=off;
+
+log_format edge '$remote_addr "$request" $status $body_bytes_sent '
+                'cache=$upstream_cache_status rt=$request_time urt=$upstream_response_time';
+
+upstream api {
+    server ${API_UPSTREAM};
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name _;
+    access_log /var/log/nginx/access.log edge;
+    client_max_body_size 2m;   # video bytes go straight to S3, never through here
+
+    gzip on;
+    gzip_types application/json application/vnd.apple.mpegurl text/vtt text/css application/javascript;
+
+    location ~ "^/cdn/(?<token>[A-Za-z0-9_-]+)/(?<expires>\d+)/(?<vid>[0-9a-f-]{36})/(?<file>[A-Za-z0-9_/.-]+)$" {
+        # 1. Authorise at the edge - origin is never touched for bad/expired links.
+        secure_link $token,$expires;
+        secure_link_md5 "$expires$vid ${CDN_SIGNING_SECRET}";
+        if ($secure_link = "")  { return 403; }
+        if ($secure_link = "0") { return 410; }
+
+        # 2. Serve from cache. The key ignores the token, so every viewer shares one copy.
+        proxy_cache media;
+        proxy_cache_key "$vid/$file";
+        proxy_cache_valid 200 206 7d;
+        proxy_cache_valid 404 10s;
+        proxy_cache_lock on;                       # collapse a thundering herd into 1 origin fetch
+        proxy_cache_lock_timeout 10s;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503;
+        proxy_cache_background_update on;
+        proxy_ignore_headers Set-Cookie;
+
+        # 3. Miss -> custom origin (the API), authenticated with a shared secret header.
+        proxy_pass http://api/origin/$vid/$file;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-Origin-Secret "${CDN_ORIGIN_SECRET}";
+
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header Access-Control-Allow-Origin * always;
+        add_header Timing-Allow-Origin * always;
+    }
+
+    location / {
+        proxy_pass http://api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+    }
+}

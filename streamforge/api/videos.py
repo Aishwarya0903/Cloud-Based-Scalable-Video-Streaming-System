@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import or_, select
 
 from ..auth import optional_auth, require_auth
+from ..cdn import playback_for
 from ..errors import APIError
 from ..extensions import db
 from ..models import Video, VideoStatus, Visibility
@@ -27,12 +28,18 @@ def _page_args() -> tuple[int, int]:
     return page, per_page
 
 
+def _with_poster(video: Video, private: bool = False) -> dict:
+    data = video.to_dict(private=private)
+    data["poster_url"] = playback_for(video.id).poster if video.status == VideoStatus.READY else None
+    return data
+
+
 def _paginate(stmt, private: bool = False):
     page, per_page = _page_args()
     result = db.paginate(stmt, page=page, per_page=per_page, error_out=False)
     return jsonify(
         {
-            "items": [v.to_dict(private=private) for v in result.items],
+            "items": [_with_poster(v, private) for v in result.items],
             "page": page,
             "per_page": per_page,
             "total": result.total,
@@ -81,6 +88,16 @@ def get_video(video_id: str):
     video = get_video_or_404(video_id)
     is_owner = g.user is not None and g.user.id == video.owner_id
     return jsonify({"video": video.to_dict(private=is_owner)})
+
+
+@bp.get("/videos/<video_id>/playback")
+@optional_auth
+def playback(video_id: str):
+    """Short-lived signed URLs for the HLS master playlist, poster and preview sprite."""
+    video = get_video_or_404(video_id)
+    if video.status != VideoStatus.READY:
+        raise APIError(409, "not_ready", f"Video is {video.status}.")
+    return jsonify({"playback": playback_for(video.id).to_dict()})
 
 
 @bp.patch("/videos/<video_id>")

@@ -1,6 +1,6 @@
 # Local stack - every service is free and open source.
-#   docker compose up --build      ->  API on http://localhost:8000
-#                                       S3 console on http://localhost:9001
+#   docker compose up --build      ->  app + CDN edge on http://localhost:8080
+#                                       S3 console     on http://localhost:9001
 name: streamforge
 
 x-app-env: &app-env
@@ -17,16 +17,37 @@ x-app-env: &app-env
   S3_CREATE_BUCKETS: "true"
   RAW_BUCKET: streamforge-raw
   MEDIA_BUCKET: streamforge-media
+  # Delivery through the nginx edge (local CloudFront stand-in)
+  CDN_MODE: edge
+  CDN_SIGNING_SECRET: ${CDN_SIGNING_SECRET:-dev-only-cdn-signing-secret}
+  CDN_ORIGIN_SECRET: ${CDN_ORIGIN_SECRET:-dev-only-origin-secret}
 
 services:
   api:
     build: .
     environment: *app-env
-    ports: ["8000:8000"]
+    expose: ["8000"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
+    restart: unless-stopped
+
+  # Edge cache: validates signed URLs, caches media, fronts the API. Port 8080 is the
+  # single public entry point, like a CloudFront distribution in front of an origin.
+  edge:
+    image: nginx:1.27-alpine
+    ports: ["8080:80"]
+    environment:
+      API_UPSTREAM: api:8000
+      CDN_SIGNING_SECRET: ${CDN_SIGNING_SECRET:-dev-only-cdn-signing-secret}
+      CDN_ORIGIN_SECRET: ${CDN_ORIGIN_SECRET:-dev-only-origin-secret}
+      NGINX_ENVSUBST_FILTER: "^(API_UPSTREAM|CDN_)"
+    volumes:
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
+      - edgecache:/var/cache/nginx
+    depends_on:
+      api: { condition: service_healthy }
     restart: unless-stopped
 
   # Transcode workers - scale out with:  docker compose up --scale worker=4
@@ -75,6 +96,7 @@ services:
       retries: 10
 
 volumes:
+  edgecache:
   pgdata:
   redisdata:
   miniodata:
