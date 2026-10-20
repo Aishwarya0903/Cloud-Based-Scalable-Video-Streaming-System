@@ -29,6 +29,15 @@ services:
       minio: { condition: service_healthy }
     restart: unless-stopped
 
+  # Transcode workers - scale out with:  docker compose up --scale worker=4
+  worker:
+    build: .
+    command: ["python", "-m", "streamforge.worker"]
+    environment: *app-env
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:

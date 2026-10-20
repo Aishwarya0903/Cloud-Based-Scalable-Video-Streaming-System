@@ -33,12 +33,36 @@ def create_app(overrides: dict | None = None) -> Flask:
     for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp):
         app.register_blueprint(blueprint)
     register_error_handlers(app)
+    _register_cli(app)
 
     with app.app_context():
         db.create_all()
         if app.config["S3_CREATE_BUCKETS"]:
             app.extensions["storage"].ensure_buckets()
         # Don't hand pooled connections to forked gunicorn workers (--preload).
-        db.engine.dispose()
+        # (In-memory SQLite lives in its single connection, so keep that one.)
+        if db.engine.url.get_backend_name() != "sqlite":
+            db.engine.dispose()
 
     return app
+
+
+def _register_cli(app: Flask) -> None:
+    import click
+
+    @app.cli.command("requeue-stuck")
+    @click.option("--minutes", default=30, help="Age after which a queued/processing video is stuck.")
+    def requeue_stuck(minutes: int) -> None:
+        """Re-enqueue videos stuck in queued/processing (e.g. after a worker crash)."""
+        from datetime import timedelta
+
+        from .jobs import enqueue_transcode
+        from .models import Video, VideoStatus, utcnow
+
+        cutoff = utcnow() - timedelta(minutes=minutes)
+        stuck = db.session.query(Video).filter(
+            Video.status.in_([VideoStatus.QUEUED, VideoStatus.PROCESSING]), Video.updated_at < cutoff
+        ).all()
+        for video in stuck:
+            enqueue_transcode(video.id)
+        click.echo(f"re-enqueued {len(stuck)} video(s)")

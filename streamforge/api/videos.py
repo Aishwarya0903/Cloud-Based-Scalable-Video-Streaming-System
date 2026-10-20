@@ -105,6 +105,24 @@ def update_video(video_id: str):
     return jsonify({"video": video.to_dict(private=True)})
 
 
+@bp.post("/videos/<video_id>/retranscode")
+@require_auth
+def retranscode(video_id: str):
+    """Owner can retry a failed video (or rebuild a ready one) from the kept original."""
+    video = get_video_or_404(video_id)
+    if video.owner_id != g.user.id:
+        raise APIError(403, "forbidden", "Only the owner can do that.")
+    if video.status not in (VideoStatus.FAILED, VideoStatus.READY):
+        raise APIError(409, "busy", f"Video is {video.status}.")
+    video.status, video.progress, video.error = VideoStatus.QUEUED, 0.0, None
+    db.session.commit()
+    from ..jobs import enqueue_transcode
+
+    enqueue_transcode(video.id)
+    db.session.refresh(video)
+    return jsonify({"video": video.to_dict(private=True)}), 202
+
+
 @bp.delete("/videos/<video_id>")
 @require_auth
 def delete_video(video_id: str):
