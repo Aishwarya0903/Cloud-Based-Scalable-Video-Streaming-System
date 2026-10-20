@@ -1,226 +1,214 @@
-# StreamForge: Cloud-Based Scalable Video Streaming System
+# Cloud-Based Scalable Video Streaming System (StreamForge)
 
 [![CI](https://github.com/Aishwarya0903/Cloud-Based-Scalable-Video-Streaming-System/actions/workflows/ci.yml/badge.svg)](https://github.com/Aishwarya0903/Cloud-Based-Scalable-Video-Streaming-System/actions/workflows/ci.yml)
 
-A video platform built with **Python/Flask, AWS S3, CloudFront and Boto3**. Browsers upload straight
-to S3 in parallel, workers turn each video into an adaptive-bitrate HLS ladder, and viewers stream it
-through a CDN using short-lived signed URLs. The player reports quality-of-experience data, so the
-platform can measure what viewers actually got.
+I built this project to learn how video platforms like YouTube or Netflix store and deliver video
+to many viewers at once. It's a small video streaming website: you can upload a video, the server
+converts it into several qualities, and viewers watch it through a CDN. The player switches quality
+automatically depending on their internet speed.
 
-![Watch page: adaptive player with the live rendition ladder](docs/screenshots/watch.jpg)
+**Built with:** Python, Flask, AWS S3, AWS CloudFront, Boto3, ffmpeg, Redis, PostgreSQL, Docker, Terraform
 
-## Highlights
+![Watch page with the quality ladder next to the player](docs/screenshots/watch.jpg)
 
-- **Direct-to-S3, resumable multipart uploads.** The API signs URLs and never touches video bytes. The
-  browser sends 4 parts in parallel, retries failures, and resumes after a reload by asking S3 which
-  parts it already holds.
-- **One decode, many encodes.** A single ffmpeg pass produces an H.264 HLS ladder (1080p to 240p) that
-  never upscales. Keyframes are aligned every 4 s across renditions, so quality switches are seamless.
-  It also builds a poster and a seek-bar thumbnail sprite with a WebVTT index.
-- **CDN delivery with signed URLs.** In production, CloudFront sits in front of a private bucket using
-  Origin Access Control, with a wildcard signed policy per video. Locally, an nginx edge cache plays the
-  same role with expiring path tokens. In both, the signature is excluded from the cache key, so every
-  viewer shares one cached copy.
-- **Quality-of-experience analytics.** Startup time, rebuffer ratio, delivered bitrate, quality
-  switches, completion rate, an audience-retention curve, and a time-decayed "Trending" ranking.
-- **Production basics.** Prometheus metrics and a Grafana dashboard, JSON logs with request IDs,
-  Redis-backed rate limits, health and readiness probes, a least-privilege IAM policy, lifecycle cost
-  controls, and CI.
-- **Free to run.** Every local component is open source, and the AWS side is designed to stay within
-  the Free Tier, with an optional $1 budget alarm.
+## What it does
 
-## Architecture
+- **Upload videos** straight from the browser to cloud storage (S3), in parallel chunks
+- **Convert each video** into 240p, 360p, 480p, 720p and 1080p versions (only up to the original's resolution)
+- **Stream videos** with automatic quality switching, the same idea YouTube uses
+- **Deliver video through a CDN** (CloudFront) so it loads fast and the server isn't overloaded
+- **Protect videos** with links that expire after a few hours
+- **Show stats** for each video: views, watch time, how long it took to start, buffering, and which
+  parts people actually watched
+- Library with search, sorting and a "Trending" tab; login with JWT tokens
+
+## How it works
+
+The whole flow, from uploading a video to someone watching it:
+
+1. **Upload.** The browser asks the Flask API to start an upload. The API returns temporary
+   upload links (presigned URLs), and the browser sends the file **directly to S3** in 8 MB chunks,
+   4 at a time. The video never passes through the Flask server.
+2. **Queue.** When all chunks are in S3, the API checks with S3 that every chunk arrived and the size
+   is right, then adds a "convert this video" job to a Redis queue.
+3. **Convert.** A worker process downloads the video and uses **ffmpeg** to create the different
+   qualities as HLS (small 4-second video segments plus playlist files). It also makes a thumbnail
+   and a grid of preview images for the seek bar, then uploads everything to a second S3 bucket.
+4. **Watch.** When someone opens a video, the API gives them a **signed link** that expires in
+   4 hours. The player (hls.js) downloads the playlist and then the segments through the **CDN**.
+5. **Measure.** While the video plays, the player sends small reports back (startup time,
+   buffering, quality changes, how far they watched). The API turns these into the stats page.
 
 ```mermaid
 flowchart LR
-    B[Browser<br/>upload page + hls.js player]
-
-    subgraph Edge["Edge (CloudFront in AWS / nginx locally)"]
-        E[Signed-URL check<br/>shared cache]
-    end
-
-    subgraph App
-        A[Flask API<br/>gunicorn]
-        W[Transcode workers<br/>RQ + ffmpeg]
-        Q[(Redis<br/>queue + rate limits)]
-        D[(PostgreSQL)]
-    end
-
-    subgraph S3["Object storage (S3 / MinIO)"]
-        R[(raw bucket)]
-        M[(media bucket)]
-    end
-
-    B -- "1. plan upload, sign parts" --> A
-    B -- "2. PUT parts in parallel" --> R
-    A -- "3. complete, enqueue" --> Q
-    Q --> W
-    W -- "4. download original" --> R
-    W -- "5. HLS ladder, poster, sprite" --> M
-    B -- "6. signed playback URLs" --> A
-    B -- "7. playlists + segments" --> E
-    E -- "cache miss only" --> M
-    B -- "8. QoE beacons" --> A
-    A --- D
-    W --- D
-    P[Prometheus + Grafana] -. scrape .-> A
+    U[Browser] -- "1. get upload links" --> API[Flask API]
+    U -- "2. upload chunks" --> RAW[(S3: raw videos)]
+    API -- "3. add job" --> Q[(Redis queue)]
+    Q --> W[Worker + ffmpeg]
+    W -- "4. read original" --> RAW
+    W -- "5. save HLS versions" --> MEDIA[(S3: processed videos)]
+    U -- "6. get signed link" --> API
+    U -- "7. stream video" --> CDN[CloudFront CDN]
+    CDN -- "only if not cached" --> MEDIA
+    API --- DB[(PostgreSQL)]
 ```
 
-**Upload path:** the API plans part sizes within S3's limits, opens a multipart upload and signs part
-URLs in batches. On completion it checks S3's own part list and the total size, so a client can't
-forge ETags, and then enqueues a job with a deterministic ID so double submits are harmless.
+## Key concepts used
 
-**Playback path:** the API issues a URL whose signature covers `hls/<video_id>/*`. Playlists reference
-segments by relative path, so one signature authorizes the whole video. The edge rejects bad or expired
-links (403 / 410) before anything reaches the origin.
+**Presigned URL.** A temporary link generated with Boto3 that lets the browser upload one specific
+chunk to S3 without having AWS credentials. It expires after an hour.
+
+**Multipart upload.** S3 lets you upload a big file in pieces and join them at the end. If the
+connection drops, only the failed piece is re-sent. My upload page remembers the upload, so choosing
+the same file again continues where it stopped.
+
+**HLS and adaptive bitrate.** The video is cut into small segments in several qualities. The player
+measures the download speed and picks the best quality that won't buffer. To make switching smooth,
+I force a keyframe every 4 seconds in every quality, so the segments line up exactly.
+
+**CDN.** CloudFront keeps copies of the video segments in data centers close to viewers. After the
+first viewer, the next ones get the cached copy and S3 isn't touched. Segments never change, so they
+are cached for a year; playlists are cached for 60 seconds.
+
+**Signed URLs.** The S3 bucket is private; only CloudFront can read it (Origin Access Control).
+Viewers need a link signed by the API, and the signature covers the whole video folder, so one
+signature works for every segment. The signature is not part of the cache key, so all viewers still
+share the same cached copy.
+
+**Local version of everything.** AWS costs money if you're not careful, so for development I run
+**MinIO** (an S3-compatible store) and an **nginx cache** that works like CloudFront, with the same
+kind of expiring links. The same code runs against real AWS by changing a few environment variables.
 
 ## Tech stack
 
-| Layer | Technology |
+| Part | What I used |
 |---|---|
-| API | Python 3.10+, Flask 3, SQLAlchemy 2, PyJWT, Flask-Limiter, gunicorn (gthread) |
-| Storage | AWS S3 via Boto3 (MinIO locally): multipart uploads, presigned URLs, lifecycle rules |
-| CDN | AWS CloudFront (OAC, signed URLs, cache and response-header policies); nginx edge cache locally |
-| Processing | ffmpeg / ffprobe, Redis + RQ workers |
-| Database | PostgreSQL (SQLite for tests and quick runs) |
-| Frontend | Server-rendered pages, vanilla JS modules, hls.js |
-| Infrastructure | Terraform (AWS provider), Docker, Docker Compose |
-| Observability | Prometheus client (multi-process), Grafana, JSON logs |
-| Quality | pytest + moto (mocked S3) with real ffmpeg transcodes, ruff, GitHub Actions, Locust |
+| Backend | Python, Flask, SQLAlchemy, JWT auth, gunicorn |
+| Storage | AWS S3 with Boto3 (MinIO when running locally) |
+| CDN | AWS CloudFront (nginx cache locally) |
+| Video processing | ffmpeg, Redis + RQ background workers |
+| Database | PostgreSQL (SQLite for tests) |
+| Frontend | HTML, CSS, JavaScript, hls.js |
+| Infrastructure | Terraform, Docker, Docker Compose |
+| Monitoring | Prometheus, Grafana |
+| Testing | pytest, moto (fake S3 for tests), Locust (load testing), GitHub Actions |
 
-## Quick start
+## Running it locally
 
-```bash
-cp .env.example .env               # optional: set your own secrets
-docker compose up --build          # open http://localhost:8080
-```
-
-Create an account, upload a video, and watch it once it's ready. Other useful commands:
+You need Docker installed. Everything runs locally and is free.
 
 ```bash
-docker compose up --scale worker=4                 # more transcode capacity
-docker compose --profile observability up          # + Prometheus :9090 and Grafana :3000
-open http://localhost:9001                         # MinIO console (streamforge / streamforge-secret)
+git clone https://github.com/Aishwarya0903/Cloud-Based-Scalable-Video-Streaming-System.git
+cd Cloud-Based-Scalable-Video-Streaming-System
+cp .env.example .env
+docker compose up --build
 ```
 
-Without Docker, for development and tests:
+Then open **http://localhost:8080**, create an account and upload a video.
+
+Optional extras:
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt                # needs ffmpeg on PATH for the transcode tests
-pytest && ruff check .
+docker compose up --scale worker=4                # more workers to convert videos faster
+docker compose --profile observability up         # Prometheus on :9090 and Grafana on :3000
 ```
 
-## Deploy the AWS side (S3 + CloudFront)
+The MinIO storage console is at http://localhost:9001 (login `streamforge` / `streamforge-secret`).
 
-`infra/terraform` provisions the private buckets, the CloudFront distribution with Origin Access
-Control and signed URLs, cache and response-header policies, lifecycle rules, a least-privilege IAM
-policy and an optional budget alarm. To run the app against it:
+## Deploying the AWS part
+
+The `infra/terraform` folder creates the AWS resources: two private S3 buckets, the CloudFront
+distribution, the signing key for the signed links, and an IAM policy that only allows access to
+those two buckets. It is set up to stay within the AWS Free Tier, and it can create a $1 budget
+alert so AWS emails you before you're charged anything.
 
 ```bash
-cd infra/terraform && terraform init && terraform apply
-# fill .env.aws from `terraform output app_env`, then:
-docker compose -f docker-compose.yml -f docker-compose.aws.yml --env-file .env.aws up --build
-python scripts/verify_cloudfront.py   # unsigned 403, direct S3 403, signed 200, edge cache Hit
+cd infra/terraform
+terraform init
+terraform apply
 ```
 
-Step-by-step instructions, cost notes and teardown are in [infra/terraform/README.md](infra/terraform/README.md).
+Then I run the app against AWS with `docker-compose.aws.yml`. The script
+`scripts/verify_cloudfront.py` checks that CloudFront works as expected: links without a signature
+are blocked, S3 can't be read directly, signed links work, and the second request comes from the
+cache. All the steps are in [infra/terraform/README.md](infra/terraform/README.md).
 
-## API
+## Main API endpoints
 
-All endpoints are under `/api/v1` and return JSON errors in the form
-`{"error": {"code", "message", "details?"}}`.
-
-| Method & path | Auth | Purpose |
-|---|---|---|
-| `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | – / – / JWT | Accounts (rate-limited) |
-| `POST /uploads` | JWT | Plan a multipart upload; returns part size and count |
-| `POST /uploads/{id}/parts` | JWT | Sign up to 100 part URLs |
-| `GET /uploads/{id}` | JWT | Parts S3 already has (used to resume) |
-| `POST /uploads/{id}/complete` / `DELETE /uploads/{id}` | JWT | Finish (verified against S3) and queue, or abort |
-| `GET /videos?q=&sort=recent\|popular\|title&page=` | – | Public library |
-| `GET /trending` | – | Engagement-weighted, 24 h half-life ranking |
-| `GET /me/videos` | JWT | Your videos in every state |
-| `GET /videos/{id}` / `PATCH` / `DELETE` | – / owner / owner | Details, edit, delete (removes S3 objects) |
-| `GET /videos/{id}/playback` | – | Signed HLS, poster and thumbnail URLs |
-| `POST /videos/{id}/retranscode` | owner | Re-run the pipeline from the kept original |
-| `POST /videos/{id}/events` | – | Player QoE beacons (`start`, `heartbeat`, `end`) |
-| `GET /videos/{id}/stats` | owner | Views, watch time, completion, startup p50/p95, rebuffer ratio, retention |
-
-Operations endpoints: `GET /healthz` (liveness), `GET /readyz` (database and S3 reachable), and
-`GET /metrics` (Prometheus format, blocked at the public edge).
-
-## Design decisions
-
-- **Uploads bypass the API.** Presigned multipart uploads let throughput scale with S3, not with API
-  workers, and a dropped connection costs one 8 MB part rather than the whole file. Lifecycle rules
-  abort abandoned uploads so they don't accrue storage charges.
-- **Completion trusts S3, not the client.** The API lists the parts S3 received and checks their count
-  and total size before completing the upload.
-- **Single-pass ladder.** `split` + `scale` in one ffmpeg process decodes the source once for every
-  rendition. Forced keyframes every 4 s give identical segment boundaries across renditions, which is
-  what lets the player switch quality mid-stream.
-- **Signatures stay out of the cache key.** A wildcard policy (CloudFront) or path token (nginx) per
-  video means one signature covers every segment. Excluding it from the cache key keeps the hit ratio
-  high, because all viewers share one cached copy.
-- **Immutable segments, short-lived playlists.** Segments, posters and sprites are cached for a year;
-  `.m3u8` playlists for 60 s, so a re-transcode shows up quickly.
-- **QoE beacons are deltas folded into one row per viewing.** That's one upsert per beacon, values are
-  clamped so a bad client can't skew the aggregates, and watched 5% slices are stored as a bitmask, so
-  the retention curve is a cheap aggregate.
-- **Stateless processes.** API and worker replicas scale horizontally. Rate limits live in Redis so
-  they hold across replicas, and Prometheus discovers every API replica through DNS.
-
-## Performance (measured)
-
-Measured on a single 2-vCPU Linux container running every service (API, worker, nginx edge, S3
-emulator, Redis) plus the load generator, so treat these as conservative lower bounds:
-
-| Scenario | Result |
+| Endpoint | What it does |
 |---|---|
-| Load test: 100 concurrent viewers for 60 s (`loadtest/locustfile.py`) | 17,364 requests, **0 failures**, 289 req/s, p50 23 ms, p95 81 ms |
-| Edge cache during the test session | **98.7 % hit ratio** (9,096 media requests, 111 origin fetches) |
-| Segment delivery under load | p50 15 ms, p95 53 ms |
-| Playlist MISS → HIT / 1.5 MB segment MISS → HIT | 29 ms → 0.7 ms / 18 ms → 2 ms |
-| Cold cache, 20 simultaneous viewers | 140 requests collapsed into 5 origin fetches |
-| Upload of a 24 MB 1080p file (4 parallel parts) | 0.8 s |
-| Transcode 40 s of 1080p → 4-rendition ladder | 89 s (CPU only) |
-| Playback start in the browser | 0.4–0.7 s |
+| `POST /api/v1/auth/register`, `/login` | Create an account or log in (returns a JWT token) |
+| `POST /api/v1/uploads` | Start an upload; returns the chunk size and number of chunks |
+| `POST /api/v1/uploads/{id}/parts` | Get presigned upload links for chunks |
+| `POST /api/v1/uploads/{id}/complete` | Finish the upload and start converting |
+| `GET /api/v1/videos` | List videos (search, sort, pages) |
+| `GET /api/v1/videos/{id}/playback` | Get the signed streaming links |
+| `POST /api/v1/videos/{id}/events` | Player reports (startup time, buffering, watch time) |
+| `GET /api/v1/videos/{id}/stats` | Stats for the video owner |
+| `GET /api/v1/trending` | Trending videos |
+| `GET /healthz`, `GET /readyz` | Health checks |
 
-## Testing and CI
+## Testing
 
-- **60 pytest tests** run against mocked S3 (moto): auth, upload planning and S3 part limits,
-  completion checks, access rules, CDN token compatibility with nginx, CloudFront signature
-  verification, analytics math, trending, rate limits, metrics and pages. **Real ffmpeg transcodes**
-  confirm the HLS output, aligned renditions and cache headers.
-- **GitHub Actions:** ruff and pytest on Python 3.10 and 3.12, `terraform fmt` and `validate`, a Docker
-  build, and a Compose config check.
-- **End to end:** a Playwright script drove the real UI (sign up, upload, transcode, playback, quality
-  lock, analytics), and `scripts/cdn_bench.py` and `scripts/verify_cloudfront.py` check the edge.
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+There are 60 tests. They use **moto** to fake S3, so no AWS account is needed, and some of them
+run real ffmpeg conversions to check the output (all qualities present, correct cache headers).
+GitHub Actions runs the tests on every push, plus `terraform validate` and a Docker build.
+
+## Results I measured
+
+I tested everything on one small machine (2 CPUs) that was running all the services and the load
+test at the same time, so real servers would do better.
+
+| Test | Result |
+|---|---|
+| 100 simulated viewers for 60 seconds (Locust) | 17,364 requests, 0 errors, average 289 requests/second |
+| Response time in that test | half under 23 ms, 95% under 81 ms |
+| Requests served from the CDN cache | 98.7% |
+| Video segment: first request vs. cached | 18 ms vs. 2 ms |
+| 20 viewers opening the same new video at once | only 5 requests reached the storage |
+| Uploading a 24 MB video | 0.8 seconds |
+| Converting a 40-second 1080p video into 4 qualities | 89 seconds |
+| Time until the video starts playing | about 0.4 to 0.7 seconds |
+
+## Challenges and how I solved them
+
+- **Presigned URLs inside Docker.** Inside Docker the API reaches storage at `minio:9000`, but the
+  browser can't, and the hostname is part of the signature. So I use a second Boto3 client that
+  signs links for the public address.
+- **Smooth quality switching.** If each quality has keyframes in different places, the segments
+  don't line up and switching stutters. I force a keyframe every 4 seconds in every quality.
+- **CSS and JavaScript returned 404.** Flask's built-in `/static` route was taking over my
+  blueprint's `/static` route. I moved the frontend files to `/assets`.
+- **nginx refused my config.** A regex with `{36}` inside a `location` block has to be in quotes,
+  otherwise nginx reads the `{` as the start of a block.
+- **The metrics broke when gunicorn started.** With `preload_app`, the app is loaded before the
+  startup hook runs, so the metrics folder didn't exist yet. I create it at the top of the config file.
+- **Deleting a video left old data behind.** SQLite doesn't enforce foreign keys by default, so the
+  "on delete cascade" never ran. I now delete the related rows explicitly.
+
+## What I would add next
+
+- Run the API and workers on AWS too (for example ECS), not just storage and the CDN
+- Encode with H.265 or AV1 to save bandwidth
+- Database migrations with Alembic
+- Captions and subtitles
 
 ## Project structure
 
 ```
-streamforge/
-  api/            uploads (multipart), videos, analytics (QoE, stats, trending)
-  pipeline/       ffprobe, ABR ladder selection, ffmpeg HLS + sprite generation
-  web/            page templates, CSS, JS (player, uploader, studio, stats), vendored hls.js
-  auth.py         JWT auth            cdn.py       signed URLs + origin
-  storage.py      Boto3 S3 wrapper    tasks.py     transcode job
-  metrics.py      Prometheus, request IDs, JSON logs
-deploy/           nginx edge, gunicorn config, Prometheus + Grafana provisioning
-infra/terraform/  S3, CloudFront, IAM, budget
-loadtest/         Locust scenario
-scripts/          CDN benchmark, CloudFront verification
-tests/            pytest suite
+streamforge/          Flask application
+  api/                uploads, videos, analytics
+  pipeline/           ffmpeg video conversion
+  web/                HTML pages, CSS, JavaScript player and uploader
+  auth.py, cdn.py, storage.py, tasks.py, metrics.py
+deploy/               nginx, gunicorn, Prometheus and Grafana config
+infra/terraform/      AWS setup (S3, CloudFront, IAM)
+loadtest/             Locust load test
+scripts/              CDN benchmark and CloudFront check
+tests/                pytest tests
 ```
-
-## Notes
-
-- Free-tier details: CloudFront's always-free 1 TB/month covers demo traffic, and S3's 5 GB is free
-  for the first 12 months of an account. Check your account's terms, set `budget_email`, and run
-  `terraform destroy` after a demo.
-- Local S3 uses a pinned MinIO release, because MinIO stopped publishing community images in late
-  2025. Any S3-compatible store works through `S3_ENDPOINT_URL`.
-- The schema is created on startup, which is enough for a demo; a production rollout would add
-  Alembic migrations.
