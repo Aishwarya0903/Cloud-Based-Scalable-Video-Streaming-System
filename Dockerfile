@@ -4,7 +4,8 @@ FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
 
 # ffmpeg is needed by the transcode worker; curl for container health checks.
 RUN apt-get update \
@@ -17,13 +18,13 @@ RUN pip install -r requirements.txt
 
 COPY streamforge ./streamforge
 COPY wsgi.py .
+COPY deploy/gunicorn.conf.py ./deploy/gunicorn.conf.py
 
-RUN useradd --create-home --uid 10001 app
+RUN useradd --create-home --uid 10001 app \
+ && mkdir -p /tmp/prometheus && chown app /tmp/prometheus
 USER app
 
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 CMD curl -fsS http://localhost:8000/healthz || exit 1
 
-# gthread workers: video bytes never touch the API, so requests are short and I/O-bound.
-CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", \
-     "--worker-class", "gthread", "--preload", "--access-logfile", "-"]
+CMD ["gunicorn", "wsgi:app", "-c", "deploy/gunicorn.conf.py"]

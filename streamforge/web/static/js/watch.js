@@ -180,6 +180,66 @@ async function loadThumbnails(vttUrl, query) {
   } catch { thumbs = []; }
 }
 
+// ----------------------------------------------------------- QoE beacons
+// One playback session per page view; numbers are sent as deltas so a lost beacon
+// only loses a few seconds of data.
+const qoe = {
+  sessionId: crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 18)}`,
+  started: false, watch: 0, stallMs: 0, stalls: 0, switches: 0,
+  stallAt: null, lastTime: 0, rangeStart: 0, timer: null,
+};
+
+function currentBitrate() {
+  return hls && hls.currentLevel >= 0 ? hls.levels[hls.currentLevel]?.bitrate || 0 : 0;
+}
+
+function beacon(type, extra = {}) {
+  const body = {
+    type, session_id: qoe.sessionId,
+    from_position: qoe.rangeStart, position: qoe.lastTime,
+    watch_delta: Math.round(qoe.watch * 10) / 10, rebuffer_ms_delta: Math.round(qoe.stallMs),
+    rebuffer_count_delta: qoe.stalls, switches_delta: qoe.switches, bitrate: currentBitrate(), ...extra,
+  };
+  qoe.watch = 0; qoe.stallMs = 0; qoe.stalls = 0; qoe.switches = 0;
+  qoe.rangeStart = qoe.lastTime;
+  const url = `/api/v1/videos/${videoId}/events`;
+  const json = JSON.stringify(body);
+  if (type === "end" && navigator.sendBeacon) {
+    navigator.sendBeacon(url, new Blob([json], { type: "text/plain" }));
+  } else {
+    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: json, keepalive: true })
+      .catch(() => {});
+  }
+}
+
+video.addEventListener("playing", () => {
+  if (!qoe.started) {
+    qoe.started = true;
+    beacon("start", { startup_ms: Math.round(performance.now() - loadStarted) });
+    qoe.timer = setInterval(() => { if (!video.paused) beacon("heartbeat"); }, 10_000);
+  }
+  if (qoe.stallAt !== null) {
+    qoe.stallMs += performance.now() - qoe.stallAt;
+    qoe.stalls += 1;
+    qoe.stallAt = null;
+  }
+});
+video.addEventListener("waiting", () => {
+  if (qoe.started && !video.seeking && qoe.stallAt === null) qoe.stallAt = performance.now();
+});
+video.addEventListener("timeupdate", () => {
+  const delta = video.currentTime - qoe.lastTime;
+  if (!video.seeking && delta > 0 && delta < 2) qoe.watch += delta;
+  if (!video.seeking) qoe.lastTime = video.currentTime;
+});
+video.addEventListener("seeking", () => { if (qoe.started) beacon("heartbeat"); });
+video.addEventListener("seeked", () => {
+  qoe.stallAt = null; // waiting during a seek is not a stall
+  qoe.lastTime = qoe.rangeStart = video.currentTime;
+});
+video.addEventListener("ended", () => { if (qoe.started) beacon("end", { finished: true }); });
+window.addEventListener("pagehide", () => { if (qoe.started) beacon("end"); });
+
 // ---------------------------------------------------------------------- boot
 async function boot() {
   let data, pb;
@@ -216,6 +276,7 @@ async function boot() {
     });
     hls.on(window.Hls.Events.LEVEL_SWITCHED, (_e, { level }) => {
       switches += 1;
+      if (switches > 1) qoe.switches += 1;
       $("st-switch").textContent = String(Math.max(0, switches - 1)); // first switch is the initial pick
       markLevel(level);
     });

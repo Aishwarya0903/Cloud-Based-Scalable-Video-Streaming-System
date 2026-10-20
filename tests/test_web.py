@@ -1,7 +1,8 @@
 import pytest
 
 
-@pytest.mark.parametrize("path", ["/", "/upload", "/studio", "/login", "/watch/0b6f1c8e-2f4e-4d47-9a51-3c1f7e0d9a10"])
+@pytest.mark.parametrize("path", ["/", "/upload", "/studio", "/login", "/watch/0b6f1c8e-2f4e-4d47-9a51-3c1f7e0d9a10",
+                                  "/studio/0b6f1c8e-2f4e-4d47-9a51-3c1f7e0d9a10"])
 def test_pages_render(client, path):
     r = client.get(path)
     assert r.status_code == 200

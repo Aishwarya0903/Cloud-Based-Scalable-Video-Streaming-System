@@ -8,7 +8,7 @@ from flask import Flask
 
 from .config import load_config
 from .errors import register_error_handlers
-from .extensions import db
+from .extensions import db, limiter
 from .storage import S3Storage
 
 __version__ = "1.0.0"
@@ -26,14 +26,22 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
+    if app.config["TRUSTED_PROXIES"]:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        n = app.config["TRUSTED_PROXIES"]
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n)
+
     db.init_app(app)
+    limiter.init_app(app)
     app.extensions["storage"] = S3Storage(app.config)
 
-    from . import auth, cdn, health
-    from .api import uploads, videos
+    from . import auth, cdn, health, metrics
+    from .api import analytics, uploads, videos
     from .web import bp as web_bp
 
-    for blueprint in (health.bp, auth.bp, uploads.bp, videos.bp, cdn.bp, web_bp):
+    metrics.init_app(app)
+    for blueprint in (health.bp, metrics.bp, auth.bp, uploads.bp, videos.bp, analytics.bp, cdn.bp, web_bp):
         app.register_blueprint(blueprint)
     register_error_handlers(app)
     _register_cli(app)

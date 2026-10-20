@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from flask import Blueprint, current_app, g, jsonify, request
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 
 from ..auth import optional_auth, require_auth
 from ..cdn import playback_for
 from ..errors import APIError
 from ..extensions import db
-from ..models import Video, VideoStatus, Visibility
+from ..models import PlaybackSession, Video, VideoStatus, Visibility
 from ..storage import get_storage
 
 bp = Blueprint("videos", __name__, url_prefix="/api/v1")
@@ -151,6 +151,7 @@ def delete_video(video_id: str):
         storage.abort_multipart_upload(video.raw_key, video.upload_id)
     storage.delete_object(storage.raw_bucket, video.raw_key)
     removed = storage.delete_prefix(storage.media_bucket, video.media_prefix)
+    db.session.execute(delete(PlaybackSession).where(PlaybackSession.video_id == video.id))
     db.session.delete(video)
     db.session.commit()
     current_app.logger.info("deleted video %s (%d media objects)", video_id, removed)

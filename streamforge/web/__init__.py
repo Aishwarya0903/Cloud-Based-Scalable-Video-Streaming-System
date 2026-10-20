@@ -31,3 +31,8 @@ def studio():
 @bp.get("/login")
 def login():
     return render_template("login.html", page="login")
+
+
+@bp.get("/studio/<video_id>")
+def stats(video_id: str):
+    return render_template("stats.html", page="stats", video_id=video_id)

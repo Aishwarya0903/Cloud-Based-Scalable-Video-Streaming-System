@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Video stats | StreamForge{% endblock %}
+{% block main %}
+<section class="page" data-video-id="{{ video_id }}">
+  <div class="page-head">
+    <div>
+      <h1 class="display" id="stats-title">Stats</h1>
+      <p class="meta" id="stats-sub"></p>
+    </div>
+    <a class="btn" id="watch-link" href="/watch/{{ video_id }}">Watch</a>
+  </div>
+
+  <dl class="kpis" id="kpis"></dl>
+
+  <section class="chart-block" aria-labelledby="ret-h">
+    <h2 id="ret-h">Audience retention</h2>
+    <p class="chart-note">Share of viewing sessions that watched each 5% of the video.</p>
+    <div class="chart" id="chart"></div>
+    <details class="chart-table">
+      <summary>Show as a table</summary>
+      <table><thead><tr><th scope="col">Part of video</th><th scope="col">Sessions that watched it</th></tr></thead><tbody id="ret-rows"></tbody></table>
+    </details>
+  </section>
+  <div class="empty" id="empty" hidden>
+    <h2>No views yet</h2>
+    <p>Numbers appear here after someone plays this video.</p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('web.static', filename='js/stats.js') }}"></script>{% endblock %}

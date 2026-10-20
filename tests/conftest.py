@@ -24,6 +24,7 @@ def app():
                 "S3_CREATE_BUCKETS": True,
                 "QUEUE_SYNC": True,
                 "UPLOAD_PART_SIZE": 5 * 1024 * 1024,
+                "RATELIMIT_ENABLED": False,
             }
         )
         with app.app_context():

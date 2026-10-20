@@ -21,7 +21,8 @@ from flask import Blueprint, current_app, g, jsonify, request
 
 from ..auth import require_auth
 from ..errors import APIError
-from ..extensions import db
+from ..extensions import db, limiter
+from ..metrics import UPLOAD_BYTES, UPLOADS_COMPLETED
 from ..models import Video, VideoStatus, Visibility
 from ..storage import get_storage
 
@@ -51,6 +52,7 @@ def _require_uploading(video: Video) -> None:
 
 
 @bp.post("")
+@limiter.limit("30/hour")
 @require_auth
 def create_upload():
     data = request.get_json(silent=True) or {}
@@ -109,6 +111,7 @@ def create_upload():
 
 
 @bp.post("/<video_id>/parts")
+@limiter.limit("300/minute")
 @require_auth
 def sign_parts(video_id: str):
     video = _owned_upload(video_id)
@@ -166,6 +169,8 @@ def complete_upload(video_id: str):
     video.upload_id = None
     video.status = VideoStatus.QUEUED
     db.session.commit()
+    UPLOADS_COMPLETED.inc()
+    UPLOAD_BYTES.inc(video.size_bytes)
 
     from ..jobs import enqueue_transcode  # local import avoids a cycle
 

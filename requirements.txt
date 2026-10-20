@@ -8,3 +8,5 @@ gunicorn==23.0.0
 rq>=2.0,<3
 redis>=5,<9
 cryptography>=42
+Flask-Limiter[redis]>=3.8,<5
+prometheus-client>=0.20,<1

@@ -26,6 +26,7 @@ function row(v) {
   if (v.status === "failed" && v.error) statusCell.append(el("span", { class: "studio-sub", text: v.error }));
 
   const actions = el("div", { class: "row-actions" });
+  if (v.status === "ready") actions.append(el("a", { class: "btn", href: `/studio/${v.id}`, text: "Stats" }));
   if (v.status === "failed" || v.status === "ready") {
     actions.append(el("button", {
       class: "btn", type: "button", text: v.status === "failed" ? "Try again" : "Reprocess",

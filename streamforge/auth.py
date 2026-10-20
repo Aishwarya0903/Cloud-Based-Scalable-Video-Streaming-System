@@ -10,7 +10,7 @@ import jwt
 from flask import Blueprint, current_app, g, jsonify, request
 
 from .errors import APIError
-from .extensions import db
+from .extensions import db, limiter
 from .models import User
 
 bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
@@ -69,6 +69,7 @@ def _json() -> dict:
 
 
 @bp.post("/register")
+@limiter.limit("10/minute; 50/day")
 def register():
     data = _json()
     email = str(data.get("email", "")).strip().lower()
@@ -88,6 +89,7 @@ def register():
 
 
 @bp.post("/login")
+@limiter.limit("10/minute")
 def login():
     data = _json()
     email = str(data.get("email", "")).strip().lower()

@@ -36,9 +36,19 @@ async function render() {
   for (const b of document.querySelectorAll("[data-sort]")) b.setAttribute("aria-pressed", String(b.dataset.sort === state.sort));
 
   try {
-    const data = await api(`/videos?${qs}`, { auth: false });
+    const data = state.sort === "trending" && !state.q
+      ? { ...(await api("/trending", { auth: false })), page: 1, pages: 1 }
+      : await api(`/videos?${qs}`, { auth: false });
+    data.total ??= data.items.length;
     grid.replaceChildren(...data.items.map(card));
     empty.hidden = data.total > 0;
+    if (!state.q) {
+      const trendingEmpty = state.sort === "trending";
+      empty.querySelector("h2").textContent = trendingEmpty ? "Nothing is trending yet" : "No videos yet";
+      empty.querySelector("p").textContent = trendingEmpty
+        ? "Videos show up here once people start watching them."
+        : "Uploaded videos appear here once they finish processing.";
+    }
     pager.hidden = data.pages <= 1;
     document.getElementById("page-label").textContent = `Page ${data.page} of ${data.pages}`;
     pager.querySelector('[data-page-step="-1"]').disabled = data.page <= 1;

@@ -55,6 +55,9 @@ server {
         add_header Timing-Allow-Origin * always;
     }
 
+    # Metrics are scraped on the internal network only.
+    location = /metrics { return 404; }
+
     location / {
         proxy_pass http://api;
         proxy_http_version 1.1;

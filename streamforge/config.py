@@ -69,6 +69,12 @@ def load_config() -> dict:
         "CDN_ORIGIN_SECRET": _env("CDN_ORIGIN_SECRET", ""),
         "CLOUDFRONT_KEY_PAIR_ID": _env("CLOUDFRONT_KEY_PAIR_ID", ""),
         "CLOUDFRONT_PRIVATE_KEY": (_env("CLOUDFRONT_PRIVATE_KEY", "") or "").replace("\\n", "\n"),
+        # --- protection / ops -----------------------------------------------
+        "RATELIMIT_ENABLED": _bool("RATELIMIT_ENABLED", True),
+        "RATELIMIT_STORAGE_URI": _env("RATELIMIT_STORAGE_URI", "memory://"),
+        # Number of reverse proxies in front of the API (nginx edge = 1). Needed so
+        # rate limits and logs see the real client IP from X-Forwarded-For.
+        "TRUSTED_PROXIES": _int("TRUSTED_PROXIES", 0),
         # --- queue ----------------------------------------------------------
         "REDIS_URL": _env("REDIS_URL", "redis://localhost:6379/0"),
         "QUEUE_NAME": _env("QUEUE_NAME", "transcode"),
